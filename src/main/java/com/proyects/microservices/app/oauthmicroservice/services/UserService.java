@@ -22,6 +22,7 @@ public class UserService implements UserDetailsService {
 
 	@Autowired
 	private UserFeingClient client;
+	
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
