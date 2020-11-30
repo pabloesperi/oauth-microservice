@@ -17,35 +17,50 @@ import org.springframework.stereotype.Service;
 import com.proyects.microservices.app.oauthmicroservice.clients.UserFeingClient;
 import com.proyects.microservices.app.userscommonsmicroservice.models.UserCommons;
 
+import brave.Tracer;
+import feign.FeignException;
+
 @Service
 public class UserService implements UserDetailsService {
 
 	@Autowired
 	private UserFeingClient client;
 	
+	@Autowired
+	private Tracer tracer;
+
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-
+	
 		Logger log = LoggerFactory.getLogger(UserService.class);
 		
-		UserCommons user = client.getUserByUserName(username);
+		try {
+			
+			tracer.currentSpan().tag("flow.mensaje", "Esto es una prueba de flujo zipkin");
+			
+			UserCommons user = client.getUserByUserName(username);
+			
+	//		Hay que pasar el objeto Roles al objeto de spring SimpleGrantedAuthority.
+			List <GrantedAuthority> authorities = user.getRoles()
+					.stream()
+					.map(role -> new SimpleGrantedAuthority(role.getRoleName()))
+					.peek(authority -> log.info("Role: " + authority.getAuthority()))
+					.collect(Collectors.toList());
+			
+			log.info("User authenticated: " + username);
+			
+			return new User(user.getUserName(), user.getPassword(), user.isEnabled(), true, 
+					true, true, authorities);
 		
-		if(user == null) {
-			log.error("User: " + user + " is not found");
-			throw new UsernameNotFoundException("User: " + user + " is not found");
+		} catch (FeignException e) {
+			
+			String error = "User: " + username + " is not found";
+			log.error(error);
+			
+//			Para agregar nueva información para zipkin
+			tracer.currentSpan().tag("error.mensaje", error + " : " + e.getMessage());
+			throw new UsernameNotFoundException("User: " + username + " is not found");
+			
 		}
-		
-//		Hay que pasar el objeto Roles al objeto de spring SimpleGrantedAuthority.
-		List <GrantedAuthority> authorities = user.getRoles()
-				.stream()
-				.map(role -> new SimpleGrantedAuthority(role.getRoleName()))
-				.peek(authority -> log.info("Role: " + authority.getAuthority()))
-				.collect(Collectors.toList());
-		
-		log.info("User authenticated: " + username);
-		
-		return new User(user.getUserName(), user.getPassword(), user.isEnabled(), true, 
-				true, true, authorities);
 	}
-
 }
